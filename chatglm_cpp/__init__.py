@@ -7,7 +7,7 @@ from .chatglm_pycpp import _C
 from .chatglm_pycpp._C import ChatMessage
 from sse_starlette.sse import EventSourceResponse
 
-__version__ = "0.3.1.dev"
+__version__ = "0.3.1"
 
 
 @dataclass
