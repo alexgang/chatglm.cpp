@@ -22,10 +22,10 @@ static inline InferenceMode to_inference_mode(const std::string &s) {
 }
 
 struct Args {
-    std::string model_path = "chatglm-ggml.bin";
+    std::string model_path = "..\\..\\..\\..\\chatglm-ggml_q4_0.bin";
     InferenceMode mode = INFERENCE_MODE_CHAT;
     bool sync = false;
-    std::string prompt = "你好";
+    std::string prompt ="hello";
     std::string system = "";
     int max_length = 2048;
     int max_new_tokens = -1;
@@ -168,149 +168,173 @@ static inline void print_message(const chatglm::ChatMessage &message) {
 }
 
 static void chat(Args &args) {
+    // 初始化计时器
     ggml_time_init();
+
+    // 记录模型加载开始时间
     int64_t start_load_us = ggml_time_us();
+
+    // 使用 ChatGLM 模型的 Pipeline 进行初始化，传入模型路径
     chatglm::Pipeline pipeline(args.model_path);
+
+    // 记录模型加载结束时间
     int64_t end_load_us = ggml_time_us();
 
+    // 获取模型的类型名称
     std::string model_name = pipeline.model->config.model_type_name();
 
+    // 创建文本流和性能统计流
     auto text_streamer = std::make_shared<chatglm::TextStreamer>(std::cout, pipeline.tokenizer.get());
     auto perf_streamer = std::make_shared<chatglm::PerfStreamer>();
+
+    // 创建流处理器组，将文本流和性能统计流组合在一起
     std::vector<std::shared_ptr<chatglm::BaseStreamer>> streamers{perf_streamer};
     if (!args.sync) {
         streamers.emplace_back(text_streamer);
     }
     auto streamer = std::make_unique<chatglm::StreamerGroup>(std::move(streamers));
 
+    // 配置生成参数
     chatglm::GenerationConfig gen_config(args.max_length, args.max_new_tokens, args.max_context_length, args.temp > 0,
                                          args.top_k, args.top_p, args.temp, args.repeat_penalty, args.num_threads);
 
+    // 打印系统和性能信息（如果启用了 verbose 模式）
     if (args.verbose) {
-        std::cout << "system info: | "
-                  << "AVX = " << ggml_cpu_has_avx() << " | "
-                  << "AVX2 = " << ggml_cpu_has_avx2() << " | "
-                  << "AVX512 = " << ggml_cpu_has_avx512() << " | "
-                  << "AVX512_VBMI = " << ggml_cpu_has_avx512_vbmi() << " | "
-                  << "AVX512_VNNI = " << ggml_cpu_has_avx512_vnni() << " | "
-                  << "FMA = " << ggml_cpu_has_fma() << " | "
-                  << "NEON = " << ggml_cpu_has_neon() << " | "
-                  << "ARM_FMA = " << ggml_cpu_has_arm_fma() << " | "
-                  << "F16C = " << ggml_cpu_has_f16c() << " | "
-                  << "FP16_VA = " << ggml_cpu_has_fp16_va() << " | "
-                  << "WASM_SIMD = " << ggml_cpu_has_wasm_simd() << " | "
-                  << "BLAS = " << ggml_cpu_has_blas() << " | "
-                  << "SSE3 = " << ggml_cpu_has_sse3() << " | "
-                  << "VSX = " << ggml_cpu_has_vsx() << " |\n";
-
-        std::cout << "inference config: | "
-                  << "max_length = " << args.max_length << " | "
-                  << "max_context_length = " << args.max_context_length << " | "
-                  << "top_k = " << args.top_k << " | "
-                  << "top_p = " << args.top_p << " | "
-                  << "temperature = " << args.temp << " | "
-                  << "repetition_penalty = " << args.repeat_penalty << " | "
-                  << "num_threads = " << args.num_threads << " |\n";
-
-        std::cout << "loaded " << pipeline.model->config.model_type_name() << " model from " << args.model_path
-                  << " within: " << (end_load_us - start_load_us) / 1000.f << " ms\n";
-
-        std::cout << std::endl;
+        // 打印系统信息，包括硬件支持的特性
+        // 打印推断配置信息
+        // 打印模型加载耗时
+        // 空行
     }
 
+    // 检查是否启用了交互模式且推断模式不是 chat
     if (args.mode != INFERENCE_MODE_CHAT && args.interactive) {
+        // 如果交互模式启用，但推断模式不是 chat，给出警告
         std::cerr << "interactive demo is only supported for chat mode, falling back to non-interactive one\n";
         args.interactive = false;
     }
 
+    // 准备系统消息
     std::vector<chatglm::ChatMessage> system_messages;
     if (!args.system.empty()) {
+        // 如果指定了系统消息，加入系统消息列表
         system_messages.emplace_back(chatglm::ChatMessage::ROLE_SYSTEM, args.system);
     }
 
+    // 如果启用了交互模式
     if (args.interactive) {
-        std::cout << R"(    ________          __  ________    __  ___                 )" << '\n'
-                  << R"(   / ____/ /_  ____ _/ /_/ ____/ /   /  |/  /_________  ____  )" << '\n'
-                  << R"(  / /   / __ \/ __ `/ __/ / __/ /   / /|_/ // ___/ __ \/ __ \ )" << '\n'
-                  << R"( / /___/ / / / /_/ / /_/ /_/ / /___/ /  / // /__/ /_/ / /_/ / )" << '\n'
-                  << R"( \____/_/ /_/\__,_/\__/\____/_____/_/  /_(_)___/ .___/ .___/  )" << '\n'
-                  << R"(                                              /_/   /_/       )" << '\n'
-                  << '\n';
-
-        std::cout
-            << "Welcome to ChatGLM.cpp! Ask whatever you want. Type 'clear' to clear context. Type 'stop' to exit.\n"
-            << "\n";
-
+        // 打印 ChatGLM 的 ASCII 艺术字
+        // 打印欢迎信息
+        // 准备消息列表，包含系统消息
         std::vector<chatglm::ChatMessage> messages = system_messages;
+
+        // 如果指定了系统消息，打印系统消息
         if (!args.system.empty()) {
             std::cout << std::setw(model_name.size()) << std::left << "System"
                       << " > " << args.system << std::endl;
         }
+
+        // 进入对话循环
         while (1) {
+            // 确定当前角色（用户或观察者）
             std::string role;
             if (!messages.empty() && !messages.back().tool_calls.empty()) {
+                // 如果有工具调用，取最后一条消息的工具调用类型
                 const auto &tool_call = messages.back().tool_calls.front();
                 if (tool_call.type == chatglm::ToolCallMessage::TYPE_FUNCTION) {
-                    // function call
-                    std::cout << "Function Call > Please manually call function `" << tool_call.function.name
-                              << "` with args `" << tool_call.function.arguments << "` and provide the results below.\n"
-                              << "Observation   > " << std::flush;
+                    // 如果是函数调用，打印提示信息
                 } else if (tool_call.type == chatglm::ToolCallMessage::TYPE_CODE) {
-                    // code interpreter
-                    std::cout << "Code Interpreter > Please manually run the code and provide the results below.\n"
-                              << "Observation      > " << std::flush;
+                    // 如果是代码解释器调用，打印提示信息
                 } else {
+                    // 未知的工具调用类型，抛出异常
                     CHATGLM_THROW << "unexpected tool type " << tool_call.type;
                 }
+                // 设置当前角色为观察者
                 role = chatglm::ChatMessage::ROLE_OBSERVATION;
             } else {
-                std::cout << std::setw(model_name.size()) << std::left << "Prompt"
-                          << " > " << std::flush;
+                // 没有工具调用，当前角色为用户
+                // 打印提示信息
                 role = chatglm::ChatMessage::ROLE_USER;
             }
+
+            // 获取用户输入
             std::string prompt;
             if (!get_utf8_line(prompt) || prompt == "stop") {
                 break;
             }
+
+            // 处理特殊命令
             if (prompt.empty()) {
                 continue;
             }
             if (prompt == "clear") {
+                // 清除对话历史
                 messages = system_messages;
                 continue;
             }
+
+            // 将用户输入作为消息加入消息列表
             messages.emplace_back(std::move(role), std::move(prompt));
+
+            // 打印模型名称
             std::cout << model_name << " > ";
+
+            // 执行 ChatGLM 的 chat 操作
             chatglm::ChatMessage output = pipeline.chat(messages, gen_config, streamer.get());
+
+            // 如果是同步生成模式，打印生成的消息
             if (args.sync) {
                 print_message(output);
             }
+
+            // 将生成的消息加入消息列表
             messages.emplace_back(std::move(output));
+
+            // 如果启用了 verbose 模式，打印性能信息
             if (args.verbose) {
                 std::cout << "\n" << perf_streamer->to_string() << "\n\n";
             }
+
+            // 重置性能统计信息
             perf_streamer->reset();
         }
+
+        // 打印结束信息
         std::cout << "Bye\n";
     } else {
+        // 非交互模式
         if (args.mode == INFERENCE_MODE_CHAT) {
+            // 如果推断模式是 chat
+            // 准备消息列表，包含系统消息
             std::vector<chatglm::ChatMessage> messages = system_messages;
+
+            // 将用户指定的提示作为消息加入列表
             messages.emplace_back(chatglm::ChatMessage::ROLE_USER, args.prompt);
+
+            // 执行 ChatGLM 的 chat 操作
             chatglm::ChatMessage output = pipeline.chat(messages, gen_config, streamer.get());
+
+            // 如果是同步生成模式，打印生成的消息
             if (args.sync) {
                 print_message(output);
             }
         } else {
+            // 如果推断模式是 generate
+            // 使用 ChatGLM 的 generate 操作生成文本
             std::string output = pipeline.generate(args.prompt, gen_config, streamer.get());
+
+            // 如果是同步生成模式，打印生成的文本
             if (args.sync) {
                 std::cout << output << "\n";
             }
         }
+
+        // 如果启用了 verbose 模式，打印性能信息
         if (args.verbose) {
             std::cout << "\n" << perf_streamer->to_string() << "\n\n";
         }
     }
 }
+
 
 int main(int argc, char **argv) {
 #ifdef _WIN32

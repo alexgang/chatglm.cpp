@@ -1,10 +1,11 @@
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union, Callable
 
-import chatglm_cpp._C as _C
-from chatglm_cpp._C import ChatMessage
+from .chatglm_pycpp import _C
+from .chatglm_pycpp._C import ChatMessage
+from sse_starlette.sse import EventSourceResponse
 
 __version__ = "0.3.1.dev"
 
@@ -25,22 +26,39 @@ def _ensure_chat_message(message: Union[ChatMessage, Dict[str, Any]]) -> ChatMes
         raise TypeError(f"expect message type to be ChatMessage or dict, but got {type(message)}")
     return chat_message
 
+# def handle_message(message,token_cache):
+#     #token_cache = []
+#     print("python call: message", message, "token_ids", token_cache)
+#     chunk = ChatCompletionResponse(
+#             object="chat.completion.chunk",
+#             choices=[ChatCompletionResponseStreamChoice(delta=DeltaMessage(content=message))],
+#         )
+#     generator = chunk.model_dump_json(exclude_unset=True)
+#     EventSourceResponse(generator)
+    # yield DeltaMessage(
+    #     role=ChatMessage.ROLE_ASSISTANT, content=message, token_ids= token_cache
+    # )
+    # yield ChatCompletionResponse(
+    #     object="chat.completion.chunk",
+    #     choices=[ChatCompletionResponseStreamChoice(delta=DeltaMessage(content=message))],
+    # )
 
 class Pipeline(_C.Pipeline):
-    def __init__(self, model_path: str, *, dtype: Optional[str] = None) -> None:
-        if Path(model_path).is_file():
+    def __init__(self, model_path: str, ov_device: str) -> None:
+        #if Path(model_path).is_file():
             # load ggml model
-            super().__init__(str(model_path))
-        else:
-            # convert hf model to ggml format
-            from chatglm_cpp.convert import convert
+            super().__init__(str(model_path), str(ov_device))
+        # else:
+        #      convert hf model to ggml format
+        #     from convert import convert
+        #
+        #     if dtype is None:
+        #         dtype = "q4_0"  # default dtype
+        #
+        #     with tempfile.NamedTemporaryFile("wb") as f:
+        #         convert(f, model_path, dtype=dtype)
+        #         super().__init__(f.name)
 
-            if dtype is None:
-                dtype = "q4_0"  # default dtype
-
-            with tempfile.NamedTemporaryFile("wb") as f:
-                convert(f, model_path, dtype=dtype)
-                super().__init__(f.name)
 
     def chat(
         self,
@@ -56,9 +74,9 @@ class Pipeline(_C.Pipeline):
         repetition_penalty: float = 1.0,
         num_threads: int = 0,
         stream: bool = False,
+        callback: Callable = None
     ) -> Union[Iterator[DeltaMessage], ChatMessage]:
         messages = [_ensure_chat_message(msg) for msg in messages]
-        input_ids = self.tokenizer.encode_messages(messages, max_context_length)
         gen_config = _C.GenerationConfig(
             max_length=max_length,
             max_new_tokens=max_new_tokens,
@@ -70,10 +88,12 @@ class Pipeline(_C.Pipeline):
             repetition_penalty=repetition_penalty,
             num_threads=num_threads,
         )
+        # input_ids = self.tokenizer.encode_messages(messages, max_context_length)
         if stream:
-            return self._stream_chat(input_ids=input_ids, gen_config=gen_config)
-        return self._sync_chat(input_ids=input_ids, gen_config=gen_config)
-
+            self.chat_pystream(messages=messages, gen_config=gen_config, callback= callback, userdata="hello")
+        else:
+        # return self._sync_chat(input_ids=input_ids, gen_config=gen_config)
+            return self.chat_pygenerate(messages=messages,gen_config=gen_config)
     def generate(
         self,
         prompt: str,
@@ -88,8 +108,9 @@ class Pipeline(_C.Pipeline):
         repetition_penalty: float = 1.0,
         num_threads: int = 0,
         stream: bool = False,
+        callback: Callable = None
     ) -> Union[Iterator[str], str]:
-        input_ids = self.tokenizer.encode(prompt, max_context_length)
+        #input_ids = self.tokenizer.encode(prompt, max_context_length)
         gen_config = _C.GenerationConfig(
             max_length=max_length,
             max_new_tokens=max_new_tokens,
@@ -102,9 +123,9 @@ class Pipeline(_C.Pipeline):
             num_threads=num_threads,
         )
         if stream:
-            return self._stream_generate(input_ids=input_ids, gen_config=gen_config)
-        return self._sync_generate(input_ids=input_ids, gen_config=gen_config)
-
+            self.chat_pystream(messages=prompt, gen_config=gen_config, callback= callback, userdata="hello")
+        #return self._sync_generate(input_ids=input_ids, gen_config=gen_config)
+        return self.chat_pygenerate(messages=prompt, gen_config=gen_config)
     def _stream_generate_ids(self, input_ids: List[int], gen_config: _C.GenerationConfig) -> Iterator[int]:
         input_ids = input_ids.copy()
         n_past = 0

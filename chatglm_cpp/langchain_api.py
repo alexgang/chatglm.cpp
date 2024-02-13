@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from typing import List, Tuple
 
-import chatglm_cpp
+import C as chatglm_cpp
 from fastapi import FastAPI, status
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
